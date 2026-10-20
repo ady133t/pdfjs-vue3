@@ -274,6 +274,19 @@ public sealed class TableExtractor
             return null;
         }
 
+        var cellTexts = textRows
+            .SelectMany(row => row)
+            .Where(value => value.Length > 0)
+            .ToList();
+        var totalCharacters = cellTexts.Sum(value => value.Length);
+        var longestCell = cellTexts.Max(value => value.Length);
+        if (cellTexts.Count >= 4 && longestCell > 250 && longestCell > totalCharacters * 0.35)
+        {
+            // A page-sized border/box often arrives as one giant merged cell, not
+            // real tabular data.
+            return null;
+        }
+
         var questionMarkRatio = textRows
             .SelectMany(row => row)
             .Count(value => value.Contains('?')) / (double)populatedCells;
@@ -388,7 +401,12 @@ public sealed class TableExtractor
         string.Join(" | ", row.Select(TextOf).Where(cell => cell.Length > 0));
 
     private static string TableSignature(ExtractedTable table) =>
-        string.Join("\u001F", table.Rows.Select(row => string.Join(" | ", row)));
+        string.Join(
+            "\u001E",
+            table.Rows.Select(row =>
+                string.Concat(row.Select(value => value.Where(character => !char.IsWhiteSpace(character))))
+            )
+        );
 
     private static string TextOf(Cell? cell)
     {
