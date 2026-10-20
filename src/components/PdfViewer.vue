@@ -93,10 +93,18 @@
 		min-width: 28px;
 		padding: 4px 8px;
 		border: 1px solid #ccc;
-		border-radius: 4px;
+		border-radius: 6px;
 		background: #fff;
+		color: #333;
 		cursor: pointer;
 		font-size: 14px;
+		line-height: 1.2;
+		transition: background-color 0.15s ease;
+	}
+
+	.pdf-toolbar button:hover:not(:disabled) {
+		background: #eef2ff;
+		border-color: #9aa4ff;
 	}
 
 	.pdf-toolbar button:disabled {
