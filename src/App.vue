@@ -26,7 +26,6 @@
 		"Annotations",
 		"XFDF import/export",
 		"Print & download",
-		"Word/Excel export",
 		"Password protected PDFs",
 		"Dark mode",
 		"Keyboard shortcuts",
@@ -51,18 +50,11 @@
 		<section class="demo">
 			<div class="demo-head">
 				<h2>Default toolbar</h2>
-				<p>
-					Page navigation, zoom, fit, rotate, search, thumbnails, outline,
-					download, print, and Word/Excel conversion.
-				</p>
+				<p>Page navigation, zoom, fit, rotate, search, thumbnails, outline, download, print.</p>
 			</div>
 			<div class="viewer-frame">
 				<ClientOnly>
-					<VPdfViewerComp
-						:src="SAMPLE_PDF"
-						:height="780"
-						filename="trace-based-jit.pdf"
-						office-export />
+					<VPdfViewerComp :src="SAMPLE_PDF" :height="780" filename="trace-based-jit.pdf" />
 				</ClientOnly>
 			</div>
 		</section>
