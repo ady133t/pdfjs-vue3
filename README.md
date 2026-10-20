@@ -1,29 +1,15 @@
-# Open Source PDF Viewer — Vue 3 + TypeScript + SSR
+# pdfjs-vue3
 
-A complete, self-hosted PDF viewer for Vue 3 apps, including server-side rendering.
-It is built directly on **pdfjs-dist** and ships with:
+A complete, open-source PDF viewer for Vue 3 + TypeScript with server-side
+rendering. Built directly on **pdfjs-dist** — no commercial viewer packages,
+license keys, watermarks, or telemetry.
 
-- canvas rendering with a selectable text layer
-- continuous scroll and single-page modes
-- page navigation, zoom, fit-width / fit-page, rotation
-- full-document search with match highlighting
-- thumbnail and outline sidebars
-- annotation tools: highlight, underline, strike-out, ink, rectangle, circle, notes, images
-- annotation undo/redo, JSON export/import and XFDF export/import
-- download, print, full screen, dark mode, document properties
-- password-protected PDFs
-- keyboard shortcuts and drag-and-drop / file picker loading
-- a plugin + controller API modelled after popular Vue PDF viewer starters
-
-Everything is MIT licensed. There are no license keys, watermarks, telemetry, or
-calls to third-party services — only the PDF you point the viewer at.
-
-> This is an independent open-source implementation. Some prop and event names
-> intentionally match commercial `@vue-pdf-viewer` starters so existing code can
-> migrate easily, but none of their code is included or required.
+[GitHub](https://github.com/ady133t/pdfjs-vue3) · [Issues](https://github.com/ady133t/pdfjs-vue3/issues) · [MIT License](LICENSE)
 
 ## Table of Contents
 
+- [Screenshots](#screenshots)
+- [Features](#features)
 - [Stack](#stack)
 - [Installation](#installation)
 - [Running](#running)
@@ -38,6 +24,45 @@ calls to third-party services — only the PDF you point the viewer at.
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Project layout](#project-layout)
 - [License](#license)
+
+## Screenshots
+
+![pdfjs-vue3 demo page](docs/screenshots/overview.png)
+
+| Annotations & notes | Full-document search |
+| :---: | :---: |
+| ![Annotation tools and notes sidebar](docs/screenshots/annotations.png) | ![Full-document search with match highlighting](docs/screenshots/search.png) |
+
+![Page thumbnails and outline sidebar](docs/screenshots/thumbnails.png)
+
+<p align="center">
+  <img src="docs/screenshots/mobile.png" width="380" alt="Responsive mobile PDF viewer" />
+</p>
+
+<sub>Screenshots captured from the five live demos in `src/App.vue`, using
+Mozilla's trace-based JIT sample PDF.</sub>
+
+## Features
+
+- canvas rendering with a selectable text layer
+- continuous scroll and single-page modes
+- page navigation, zoom, fit-width / fit-page, rotation
+- full-document search with match highlighting
+- thumbnail and outline sidebars
+- annotation tools: highlight, underline, strike-out, ink, rectangle, circle, notes, images
+- annotation undo/redo, JSON export/import and XFDF export/import
+- download, print, full screen, dark mode, document properties
+- password-protected PDFs
+- keyboard shortcuts and drag-and-drop / file picker loading
+- a plugin + controller API modelled after popular Vue PDF viewer starters
+- responsive layout for narrow screens
+
+Everything is MIT licensed. There are no license keys, watermarks, telemetry, or
+calls to third-party services — only the PDF you point the viewer at.
+
+> This is an independent open-source implementation. Some prop and event names
+> intentionally match commercial `@vue-pdf-viewer` starters so existing code can
+> migrate easily, but none of their code is included or required.
 
 ## Stack
 
