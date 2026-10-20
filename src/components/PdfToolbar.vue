@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, ref, watch } from "vue";
+	import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 	import ViewerIcon from "./ViewerIcon.vue";
 	import type { AnnotationTool, ToolbarItem, ToolbarOptions } from "../lib/types";
 
@@ -23,6 +23,8 @@
 			canRedo?: boolean;
 			hasSelection?: boolean;
 			fullscreen?: boolean;
+			officeExport?: boolean;
+			exporting?: "docx" | "xlsx" | null;
 			searchQuery?: string;
 			searchCount?: number;
 			searchIndex?: number;
@@ -42,6 +44,8 @@
 			canRedo: false,
 			hasSelection: false,
 			fullscreen: false,
+			officeExport: false,
+			exporting: null,
 			searchQuery: "",
 			searchCount: 0,
 			searchIndex: -1,
@@ -59,6 +63,7 @@
 		(e: "rotate", direction: 1 | -1): void;
 		(e: "toggle-sidebar", name: string): void;
 		(e: "download"): void;
+		(e: "export-office", format: "docx" | "xlsx"): void;
 		(e: "print"): void;
 		(e: "open"): void;
 		(e: "fullscreen"): void;
@@ -108,6 +113,9 @@
 	const searchValue = ref(props.searchQuery);
 	const pageValue = ref(String(props.page));
 	const rootEl = ref<HTMLDivElement | null>(null);
+	const exportMenuOpen = ref(false);
+	const exportToggleEl = ref<HTMLButtonElement | null>(null);
+	const exportMenuPosition = ref({ top: 0, right: 0 });
 
 	watch(
 		() => props.page,
@@ -139,6 +147,18 @@
 		);
 		return ["cursor", ...ALLOWED_TOOLS.filter((tool) => tool !== "cursor" && allowed.has(tool))];
 	});
+
+	const exportMenuStyle = computed<Record<string, string>>(() => ({
+		top: `${exportMenuPosition.value.top}px`,
+		right: `${exportMenuPosition.value.right}px`,
+		"--pdf-toolbar-bg": props.dark ? "#23262e" : "#f8f9fb",
+		"--pdf-fg": props.dark ? "#e6e9ef" : "#2f3542",
+		"--pdf-muted": props.dark ? "#9aa3b2" : "#6b7280",
+		"--pdf-border": props.dark ? "#343a46" : "#dcdfe6",
+		"--pdf-hover": props.dark ? "#313743" : "#e9edf5",
+		"--pdf-accent": props.dark ? "#7c93ff" : "#4c6ef5",
+		"--pdf-accent-soft": props.dark ? "#2c3556" : "#e3eaff",
+	}));
 
 	function focusSearch() {
 		searchOpen.value = true;
@@ -172,6 +192,67 @@
 	function toggleSidebar(name: string) {
 		emit("toggle-sidebar", name);
 	}
+
+	function chooseExport(format: "docx" | "xlsx") {
+		exportMenuOpen.value = false;
+		emit("export-office", format);
+	}
+
+	function toggleExportMenu() {
+		if (exportMenuOpen.value) {
+			exportMenuOpen.value = false;
+			return;
+		}
+
+		const rect = exportToggleEl.value?.getBoundingClientRect();
+		if (!rect) return;
+		exportMenuPosition.value = {
+			top: Math.round(rect.bottom + 8),
+			right: Math.max(8, Math.round(window.innerWidth - rect.right)),
+		};
+		exportMenuOpen.value = true;
+	}
+
+	function onDocumentPointerDown(event: PointerEvent) {
+		if (!exportMenuOpen.value) return;
+		const target = event.target as Element | null;
+		if (
+			target?.closest(".pdf-download-control") ||
+			target?.closest(".pdf-export-menu")
+		) {
+			return;
+		}
+		exportMenuOpen.value = false;
+	}
+
+	function onDocumentKeydown(event: KeyboardEvent) {
+		if (event.key === "Escape") exportMenuOpen.value = false;
+	}
+
+	function onViewportChange() {
+		if (exportMenuOpen.value) exportMenuOpen.value = false;
+	}
+
+	onMounted(() => {
+		document.addEventListener("pointerdown", onDocumentPointerDown);
+		document.addEventListener("keydown", onDocumentKeydown);
+		window.addEventListener("resize", onViewportChange);
+		window.addEventListener("scroll", onViewportChange, true);
+	});
+
+	onBeforeUnmount(() => {
+		document.removeEventListener("pointerdown", onDocumentPointerDown);
+		document.removeEventListener("keydown", onDocumentKeydown);
+		window.removeEventListener("resize", onViewportChange);
+		window.removeEventListener("scroll", onViewportChange, true);
+	});
+
+	watch(
+		() => props.exporting,
+		(value) => {
+			if (value) exportMenuOpen.value = false;
+		}
+	);
 </script>
 
 <template>
@@ -357,14 +438,65 @@
 					@click="toggleSidebar('annotations')">
 					<ViewerIcon name="highlight" />
 				</button>
-				<button
+				<div
 					v-if="on('download')"
-					class="pdf-tool-button"
-					title="Download"
-					aria-label="Download PDF"
-					@click="emit('download')">
-					<ViewerIcon name="download" />
-				</button>
+					class="pdf-download-control"
+					:class="{ 'is-exporting': exporting }">
+					<button
+						class="pdf-tool-button"
+						title="Download PDF"
+						aria-label="Download PDF"
+						:disabled="Boolean(exporting)"
+						@click="emit('download')">
+						<span v-if="exporting" class="pdf-export-spinner" aria-hidden="true" />
+						<ViewerIcon v-else name="download" />
+					</button>
+					<button
+						v-if="officeExport"
+						ref="exportToggleEl"
+						type="button"
+						class="pdf-tool-button pdf-export-toggle"
+						:class="{ 'is-active': exportMenuOpen }"
+						title="Convert to Word or Excel"
+						aria-label="Convert to Word or Excel"
+						aria-haspopup="menu"
+						:aria-expanded="exportMenuOpen"
+						:disabled="Boolean(exporting)"
+						@click.stop="toggleExportMenu">
+						<span aria-hidden="true">▾</span>
+					</button>
+					<Teleport to="body">
+						<div
+							v-if="officeExport && exportMenuOpen"
+							class="pdf-export-menu"
+							:style="exportMenuStyle"
+							role="menu"
+							aria-label="Convert document"
+							@pointerdown.stop>
+							<p class="pdf-export-title">Convert document</p>
+							<button
+								type="button"
+								role="menuitem"
+								:disabled="Boolean(exporting)"
+								@click="chooseExport('docx')">
+								<span class="pdf-export-ext">DOCX</span>
+								<span class="pdf-export-label">Word document</span>
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								:disabled="Boolean(exporting)"
+								@click="chooseExport('xlsx')">
+								<span class="pdf-export-ext">XLSX</span>
+								<span class="pdf-export-label">Excel workbook</span>
+							</button>
+							<p class="pdf-export-hint">
+								Tables are detected for Excel. Conversion runs on the
+								self-hosted service.
+							</p>
+						</div>
+					</Teleport>
+				</div>
 				<button
 					v-if="on('print')"
 					class="pdf-tool-button"
@@ -559,6 +691,126 @@
 	.pdf-tool-button:disabled {
 		opacity: 0.38;
 		cursor: not-allowed;
+	}
+
+	.pdf-download-control {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.pdf-download-control > .pdf-tool-button:first-child {
+		border-top-right-radius: 4px;
+		border-bottom-right-radius: 4px;
+	}
+
+	.pdf-export-toggle {
+		width: 18px;
+		margin-left: -2px;
+		border-top-left-radius: 4px;
+		border-bottom-left-radius: 4px;
+		font-size: 10px;
+		color: var(--pdf-muted, #6b7280);
+	}
+
+	.pdf-export-menu {
+		position: fixed;
+		top: 0;
+		right: 0;
+		z-index: 1000;
+		width: 248px;
+		max-width: calc(100vw - 16px);
+		box-sizing: border-box;
+		padding: 8px;
+		border: 1px solid var(--pdf-border, #dcdfe6);
+		border-radius: 10px;
+		background: var(--pdf-toolbar-bg, #f8f9fb);
+		color: var(--pdf-fg, #2f3542);
+		font-family:
+			Inter,
+			ui-sans-serif,
+			system-ui,
+			-apple-system,
+			"Segoe UI",
+			Roboto,
+			sans-serif;
+		font-size: 13px;
+		box-shadow:
+			0 10px 24px rgba(15, 23, 42, 0.16),
+			0 2px 6px rgba(15, 23, 42, 0.12);
+	}
+
+	.pdf-export-title {
+		margin: 2px 6px 6px;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--pdf-muted, #6b7280);
+	}
+
+	.pdf-export-menu button {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		padding: 8px;
+		border: 0;
+		border-radius: 7px;
+		background: transparent;
+		color: var(--pdf-fg, #2f3542);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.pdf-export-menu button:hover:not(:disabled) {
+		background: var(--pdf-hover, #e9edf5);
+	}
+
+	.pdf-export-menu button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.pdf-export-ext {
+		display: inline-flex;
+		justify-content: center;
+		width: 44px;
+		padding: 3px 0;
+		border-radius: 4px;
+		background: var(--pdf-accent-soft, #dfe7ff);
+		color: var(--pdf-accent, #4c6ef5);
+		font-size: 9px;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+	}
+
+	.pdf-export-label {
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.pdf-export-hint {
+		margin: 6px 6px 2px;
+		color: var(--pdf-muted, #6b7280);
+		font-size: 10px;
+		line-height: 1.45;
+	}
+
+	.pdf-export-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid currentColor;
+		border-right-color: transparent;
+		border-radius: 50%;
+		animation: pdf-export-spin 0.7s linear infinite;
+	}
+
+	@keyframes pdf-export-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.pdf-page-form {

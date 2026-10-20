@@ -23,7 +23,9 @@
 		"build:client": "vite build --ssrManifest --outDir dist/client",
 		"build:server": "vite build --ssr src/entry-server.ts --outDir dist/server",
 		"preview": "cross-env NODE_ENV=production node server",
-		"typecheck": "vue-tsc --noEmit"
+		"typecheck": "vue-tsc --noEmit",
+		"converter": "dotnet run --project converter/PdfConverter.Api",
+		"converter:build": "dotnet build converter/PdfConverter.Api"
 	},
 	"dependencies": {
 		"compression": "^1.7.4",

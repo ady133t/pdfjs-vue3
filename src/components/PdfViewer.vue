@@ -45,6 +45,10 @@
 			height?: string | number;
 			scrollMode?: "continuous" | "single";
 			filename?: string;
+			/** Enables Word/Excel export through the self-hosted converter. */
+			officeExport?: boolean;
+			/** Base path of the conversion API. Defaults to /api/convert. */
+			conversionEndpoint?: string;
 		}>(),
 		{
 			plugins: () => [],
@@ -54,6 +58,8 @@
 			theme: "auto",
 			height: "100%",
 			scrollMode: "continuous",
+			officeExport: false,
+			conversionEndpoint: "/api/convert",
 		}
 	);
 
@@ -82,6 +88,7 @@
 	const loading = ref(false);
 	const progress = ref(0);
 	const error = ref("");
+	const exporting = ref<"docx" | "xlsx" | null>(null);
 	const pageCount = ref(0);
 	const currentPage = ref(1);
 	const scale = ref(1);
@@ -482,6 +489,66 @@
 		anchor.click();
 		anchor.remove();
 		window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+	}
+
+	function safeBaseName(): string {
+		return (
+			filename()
+				.replace(/\.pdf$/i, "")
+				.replace(/[\\/:*?"<>|]/g, "-")
+				.trim() || "document"
+		);
+	}
+
+	async function exportOffice(format: "docx" | "xlsx") {
+		if (!doc.value || exporting.value) return;
+		const label = format === "docx" ? "Word" : "Excel";
+		exporting.value = format;
+		showToast(`Converting to ${label}…`);
+
+		try {
+			const data = await doc.value.getData();
+			const endpoint = (props.conversionEndpoint || "/api/convert").replace(/\/+$/, "");
+			const response = await fetch(
+				`${endpoint}/${format}?name=${encodeURIComponent(filename())}`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/pdf" },
+					body: new Blob([data as unknown as BlobPart], { type: "application/pdf" }),
+					signal: AbortSignal.timeout(180_000),
+				}
+			);
+
+			if (!response.ok) {
+				let message = `Conversion failed (${response.status}).`;
+				try {
+					const payload = (await response.json()) as { error?: string };
+					if (payload?.error) message = payload.error;
+				} catch {
+					/* Not a JSON error response. */
+				}
+				throw new Error(message);
+			}
+
+			const blob = await response.blob();
+			if (!blob.size) throw new Error("The converter returned an empty file.");
+
+			const url = URL.createObjectURL(blob);
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = `${safeBaseName()}.${format}`;
+			document.body.append(anchor);
+			anchor.click();
+			anchor.remove();
+			window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+			showToast(`${label} export ready.`);
+		} catch (exportError) {
+			const message =
+				exportError instanceof Error ? exportError.message : `Could not export ${label}.`;
+			showToast(message);
+		} finally {
+			exporting.value = null;
+		}
 	}
 
 	async function print() {
@@ -958,6 +1025,10 @@
 			getResults: () => searchResults.value,
 		},
 		downloadController: { download },
+		officeController: {
+			exportWord: () => exportOffice("docx"),
+			exportExcel: () => exportOffice("xlsx"),
+		},
 		printController: { print },
 		annotationController: annotationPlugin.value?.controller,
 		getDocument: () => doc.value,
@@ -993,6 +1064,8 @@
 			:can-redo="annotationStore?.canRedo.value ?? false"
 			:has-selection="Boolean(selectedAnnotation)"
 			:fullscreen="isFullscreen"
+			:office-export="officeExport"
+			:exporting="exporting"
 			:search-query="searchQuery"
 			:search-count="searchResults.length"
 			:search-index="searchIndex"
@@ -1006,6 +1079,7 @@
 			@rotate="rotate"
 			@toggle-sidebar="toggleSidebar"
 			@download="download"
+			@export-office="exportOffice"
 			@print="print"
 			@open="openInput?.click()"
 			@fullscreen="toggleFullscreen"

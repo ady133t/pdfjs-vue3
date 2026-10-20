@@ -208,6 +208,10 @@ export interface ViewerExposed {
   rotateController: RotateController
   searchController: SearchController
   downloadController: { download(): Promise<void> }
+  officeController: {
+    exportWord(): Promise<void>
+    exportExcel(): Promise<void>
+  }
   printController: { print(): Promise<void> }
   annotationController?: AnnotationController
   doc: unknown

@@ -20,6 +20,7 @@ license keys, watermarks, or telemetry.
   - [Exposed controllers](#exposed-controllers)
 - [Toolbar](#toolbar)
 - [Annotations](#annotations)
+- [Office export (Word / Excel)](#office-export-word--excel)
 - [SSR](#ssr)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Project layout](#project-layout)
@@ -34,6 +35,8 @@ license keys, watermarks, or telemetry.
 | ![Annotation tools and notes sidebar](docs/screenshots/annotations.png) | ![Full-document search with match highlighting](docs/screenshots/search.png) |
 
 ![Page thumbnails and outline sidebar](docs/screenshots/thumbnails.png)
+
+![Word and Excel export menu](docs/screenshots/office-export.png)
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" width="380" alt="Responsive mobile PDF viewer" />
@@ -52,6 +55,7 @@ Mozilla's trace-based JIT sample PDF.</sub>
 - annotation tools: highlight, underline, strike-out, ink, rectangle, circle, notes, images
 - annotation undo/redo, JSON export/import and XFDF export/import
 - download, print, full screen, dark mode, document properties
+- Word and Excel export through the self-hosted .NET converter
 - password-protected PDFs
 - keyboard shortcuts and drag-and-drop / file picker loading
 - a plugin + controller API modelled after popular Vue PDF viewer starters
@@ -73,6 +77,10 @@ calls to third-party services — only the PDF you point the viewer at.
 | Build      | Vite 6                     | MIT        |
 | Server     | Express 4 + sirv           | MIT        |
 | PDF engine | `pdfjs-dist` 6             | Apache-2.0 |
+| Office API | .NET 9 minimal API         | MIT        |
+| PDF parser | PdfPig                     | Apache-2.0 |
+| Tables     | Tabula (`tabula-sharp`)    | MIT        |
+| DOCX/XLSX  | Open XML SDK               | MIT        |
 
 ## Installation
 
@@ -81,7 +89,8 @@ npm install
 ```
 
 Requires Node.js 22.13 or newer (`pdfjs-dist` 6 and the top-level `await` in
-`server.js`).
+`server.js`). Word/Excel export additionally requires the **.NET 9 SDK** (or
+Docker) for the self-hosted converter.
 
 During `npm run dev` and `npm run build`, a small script copies pdf.js runtime
 assets (`cmaps`, `standard_fonts`, `wasm`) from `node_modules/pdfjs-dist` into
@@ -93,6 +102,9 @@ assets (`cmaps`, `standard_fonts`, `wasm`) from `node_modules/pdfjs-dist` into
 # Development server (Express + Vite middleware, HMR)
 npm run dev
 
+# .NET converter for Word/Excel export, in a second terminal
+npm run converter
+
 # Production build (client + server bundles)
 npm run build
 
@@ -103,8 +115,11 @@ npm run preview
 npm run typecheck
 ```
 
-Open `http://localhost:5173`. Override the port with `PORT` and host under a
-sub-path with `BASE=/subdir/`.
+Open `http://localhost:5173`. The converter listens on `http://localhost:5080`.
+The viewer itself works without the converter; only the DOCX/XLSX menu items
+need it. Override the port with `PORT`, host under a sub-path with
+`BASE=/subdir/`, and point the Node proxy at another converter with
+`CONVERTER_URL=http://host:port`.
 
 ## Quick Start
 
@@ -144,6 +159,8 @@ explicit height.
 | `height`         | `string \| number`                            | `"100%"`       | CSS height, or a pixel number.                                              |
 | `scrollMode`     | `"continuous" \| "single"`                    | `"continuous"` | Scroll all pages, or render one page at a time.                             |
 | `filename`       | `string`                                      | —              | Download filename. Defaults to the URL basename or `document.pdf`.          |
+| `officeExport`   | `boolean`                                     | `false`        | Show the Word/Excel conversion menu. Requires the converter service.       |
+| `conversionEndpoint` | `string`                                  | `"/api/convert"` | Base path of the conversion API used by the browser.                      |
 
 ### Events
 
@@ -194,6 +211,7 @@ function jump() {
 | `rotateController`     | `rotateClockwise`, `rotateCounterClockwise`, `setRotation`, `getRotation`                                  |
 | `searchController`     | `search`, `next`, `previous`, `clear`, `getResults`                                                        |
 | `downloadController`   | `download`                                                                                                 |
+| `officeController`     | `exportWord`, `exportExcel`                                                                                |
 | `printController`      | `print`                                                                                                    |
 | `annotationController` | `add`, `remove`, `update`, `getAll`, `clear`, `undo`, `redo`, `exportJSON`, `importJSON`, `exportXFDF`, `importXFDF`, `setTool`, `save`, `load` |
 | `getDocument`          | Returns the current `PDFDocumentProxy`.                                                                     |
@@ -288,6 +306,85 @@ const json = controller?.exportJSON();
 controller?.importXFDF(xfdfString);
 ```
 
+## Office export (Word / Excel)
+
+Word and Excel export are powered by an optional, self-hosted **.NET 9**
+service included in this repository. The browser uploads the loaded PDF to that
+service and downloads the converted file. No external conversion API is used.
+
+### Start the converter
+
+```bash
+# .NET 9 SDK required
+npm run converter
+
+# or directly
+dotnet run --project converter/PdfConverter.Api --urls http://localhost:5080
+```
+
+With Docker:
+
+```bash
+docker build -t pdfjs-vue3-converter converter/PdfConverter.Api
+docker run --rm -p 5080:8080 pdfjs-vue3-converter
+```
+
+The Node server proxies `/api/convert/docx` and `/api/convert/xlsx` to
+`http://localhost:5080`. The app works without the converter; only the office
+exports need it.
+
+Configuration:
+
+| Variable | Where | Default | Purpose |
+| --- | --- | --- | --- |
+| `CONVERTER_URL` | Node | `http://localhost:5080` | Upstream converter URL |
+| `CONVERTER_TIMEOUT_MS` | Node | `180000` | Conversion timeout |
+| `CONVERTER_API_KEY` | Node + .NET | — | Optional shared secret, sent as `X-Api-Key` |
+| `Cors__AllowedOrigins__0` | .NET | `http://localhost:5173` | Direct cross-origin use (the proxy does not need CORS) |
+
+### Enable in the viewer
+
+```vue
+<PdfViewer src="/report.pdf" :height="800" office-export />
+```
+
+The download control becomes a split button: the main icon downloads the
+original PDF, and the caret opens **Word document** and **Excel workbook**.
+The same actions are exposed programmatically:
+
+```ts
+await viewer.value?.officeController.exportWord()
+await viewer.value?.officeController.exportExcel()
+```
+
+### Direct API
+
+```http
+POST /api/convert/docx?name=quarterly-report.pdf
+Content-Type: application/pdf
+
+<raw PDF bytes>
+```
+
+`/api/convert/xlsx` works the same way through the Node proxy. The .NET service
+itself exposes `POST /convert/docx`, `POST /convert/xlsx` and `GET /health`.
+
+### Fidelity and limitations
+
+- **DOCX:** rebuilds an editable text flow with basic fonts, sizes, headings and
+  detected tables. Images and exact multi-column placement are not preserved;
+  table content is appended as real Word tables after each page's text.
+- **XLSX:** creates one worksheet per detected table, with a frozen header,
+  auto-filter, column widths and numeric/percentage cells. If no table is found
+  the API returns `422` with a descriptive error.
+- Ruled (lattice) and borderless (stream) tables are detected. Prose, code
+  listings and figure labels are filtered with conservative heuristics.
+- Scanned/image-only PDFs require OCR, which is not included.
+- Complex layouts may differ from the PDF. Keep the original PDF for archival
+  fidelity.
+- The upload limit is 50 MB. PDF bytes are sent to the converter, so run it in a
+  trusted environment.
+
 ## SSR
 
 The viewer talks to canvas, workers and `IntersectionObserver`, so it is mounted
@@ -342,9 +439,19 @@ src/
     pdf-geometry.ts           Viewport helpers
   plugins/annotation.ts       createAnnotationPlugin()
   styles/viewer.css           Viewer theme tokens and pdf.js text layer CSS
+converter/
+  PdfConverter.Api/           .NET 9 Word/Excel conversion service
+    Program.cs                Minimal API: /convert/docx, /convert/xlsx, /health
+    Services/
+      PdfToDocxConverter.cs   Text flow and Word tables
+      PdfToXlsxConverter.cs   XLSX workbook generation
+      TableExtractor.cs       Lattice + stream table detection
+    Dockerfile
+docs/screenshots/             README screenshots
 ```
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). `pdfjs-dist` is Apache-2.0; Vue, Vite and Express
-are MIT.
+MIT — see [LICENSE](./LICENSE). The PDF viewer uses `pdfjs-dist`
+(Apache-2.0); Vue, Vite and Express are MIT. The optional converter uses PdfPig
+(Apache-2.0), Tabula/tabula-sharp (MIT) and the Open XML SDK (MIT).
