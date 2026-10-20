@@ -379,10 +379,6 @@ itself exposes `POST /convert/docx`, `POST /convert/xlsx` and `GET /health`.
   the API returns `422` with a descriptive error.
 - Ruled (lattice) and borderless (stream) tables are detected. Prose, code
   listings and figure labels are filtered with conservative heuristics.
-- Heavily merged forms (for example government assessment forms) may produce
-  partial tables because merged cells and page-sized borders do not map cleanly
-  to a worksheet grid. Text is preserved, but layout and some row groupings may
-  differ.
 - Scanned/image-only PDFs require OCR, which is not included.
 - Complex layouts may differ from the PDF. Keep the original PDF for archival
   fidelity.
